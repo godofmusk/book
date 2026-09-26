@@ -311,23 +311,11 @@ function ReaderShell() {
     setOcrLoading(true);
     setError(null);
     try {
-      const body = new FormData();
-      body.append("file", await (await fetch(pageImage)).blob(), "page.png");
-      body.append("apikey", "helloworld");
-      body.append("language", "eng");
-      body.append("isOverlayRequired", "false");
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 25_000);
-      let text = "";
-      try {
-        const response = await fetch("https://api.ocr.space/parse/image", { method: "POST", body, signal: controller.signal });
-        if (!response.ok) throw new Error("OCR service request failed");
-        const result = await response.json() as { ParsedResults?: Array<{ ParsedText?: string }>; ErrorMessage?: string };
-        text = result.ParsedResults?.map((item) => item.ParsedText ?? "").join("\n").trim() ?? "";
-        if (!text) throw new Error(result.ErrorMessage || "No text was detected");
-      } finally {
-        window.clearTimeout(timeout);
-      }
+      const puter = (window as Window & { puter?: { ai?: { ocr?: { txt: (image: string) => Promise<string> } } } }).puter;
+      if (!puter?.ai?.ocr?.txt) throw new Error("OCR service is still loading. Please try again.");
+      const timeout = new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("OCR service timed out. Please try again.")), 30_000));
+      const text = (await Promise.race([puter.ai.ocr.txt(pageImage), timeout])).trim();
+      if (!text) throw new Error("No text was detected");
       setPageText(text);
       setPageTextItems([text]);
     } catch (error) {
