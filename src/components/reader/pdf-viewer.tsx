@@ -45,6 +45,7 @@ type PdfViewerProps = {
   onBookmarks?: (bookmarks: PdfBookmark[]) => void;
   onSelection: (payload: SelectionPayload | null) => void;
   onPageText?: (text: string) => void;
+  onPageImage?: (imageDataUrl: string) => void;
   onTextItems?: (items: string[]) => void;
   onTextBlocks?: (blocks: TextBlock[]) => void;
   translatedBlocks?: Array<TextBlock & { translation: string }> | null;
@@ -61,6 +62,7 @@ export function PdfViewer({
   onBookmarks,
   onSelection,
   onPageText,
+  onPageImage,
   onTextItems,
   onTextBlocks,
   translatedBlocks,
@@ -245,6 +247,7 @@ export function PdfViewer({
           .map((item) => ("str" in item && typeof item.str === "string" ? item.str : ""))
           .filter(Boolean),
       );
+      onPageImage?.(canvas.toDataURL("image/png"));
       const blocks: TextBlock[] = [];
       let pendingLineBreak = false;
       for (const item of textContent.items) {

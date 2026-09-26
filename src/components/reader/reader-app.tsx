@@ -16,6 +16,7 @@ import {
   Plus,
   RotateCcw,
   Settings2,
+  ScanText,
   Sun,
   X,
   ChevronDown,
@@ -131,6 +132,8 @@ function ReaderShell() {
   const [pageTextItems, setPageTextItems] = useState<string[]>([]);
   const [translatedPageText, setTranslatedPageText] = useState<string | null>(null);
   const [pageBlocks, setPageBlocks] = useState<TextBlock[]>([]);
+  const [pageImage, setPageImage] = useState<string | null>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [translatedBlocks, setTranslatedBlocks] = useState<Array<TextBlock & { translation: string }> | null>(null);
   const [pageTranslating, setPageTranslating] = useState(false);
   const [floatCard, setFloatCard] = useState<{
@@ -302,6 +305,30 @@ function ReaderShell() {
     dismissTransient();
   }
 
+
+  async function runOcr() {
+    if (!pageImage || ocrLoading) return;
+    setOcrLoading(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append("file", await (await fetch(pageImage)).blob(), "page.png");
+      body.append("apikey", "helloworld");
+      body.append("language", "eng");
+      body.append("isOverlayRequired", "false");
+      const response = await fetch("https://api.ocr.space/parse/image", { method: "POST", body });
+      if (!response.ok) throw new Error("OCR service request failed");
+      const result = await response.json() as { ParsedResults?: Array<{ ParsedText?: string }>; ErrorMessage?: string };
+      const text = result.ParsedResults?.map((item) => item.ParsedText ?? "").join("\n").trim();
+      if (!text) throw new Error(result.ErrorMessage || "No text was detected");
+      setPageText(text);
+      setPageTextItems([text]);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "OCR failed");
+    } finally {
+      setOcrLoading(false);
+    }
+  }
 
   async function translateWholePage() {
     if (translatedBlocks) {
@@ -508,6 +535,9 @@ function ReaderShell() {
           >
             <Plus className="size-4" />
           </Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Run OCR" disabled={!pageImage || ocrLoading} onClick={() => void runOcr()}>
+            {ocrLoading ? <LoaderCircle className="size-4 animate-spin" /> : <ScanText className="size-4" />}
+          </Button>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -574,6 +604,9 @@ function ReaderShell() {
         <Button className="min-w-0 flex-1" variant="ghost" size="icon-sm" aria-label="Zoom out" onClick={() => setZoom(zoom - 0.1)}><Minus className="size-4" /></Button><span className="w-10 shrink-0 text-center text-[10px] tabular-nums text-muted">{Math.round(zoom * 100)}%</span><Button className="min-w-0 flex-1" variant="ghost" size="icon-sm" aria-label="Zoom in" onClick={() => setZoom(zoom + 0.1)}><Plus className="size-4" /></Button>
       </div>
       <div className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-1 border-t border-white/10 bg-[var(--header)] p-1 text-white sm:hidden" dir="ltr">
+        <Button className="min-w-0 flex-1" variant="ghost" size="icon-sm" aria-label="Run OCR" disabled={!pageImage || ocrLoading} onClick={() => void runOcr()}>
+          {ocrLoading ? <LoaderCircle className="size-4 animate-spin" /> : <ScanText className="size-4" />}
+        </Button>
         <Button className="min-w-0 flex-1" variant="ghost" size="icon-sm" aria-label={translatedBlocks ? "Restore original" : "Translate page"} disabled={pageTranslating || (!translatedBlocks && !pageBlocks.length)} onClick={() => void translateWholePage()}>{pageTranslating ? <LoaderCircle className="size-4 animate-spin" /> : translatedPageText ? <RotateCcw className="size-4" /> : <Languages className="size-4" />}</Button>
         <Button className="min-w-0 flex-1" variant="ghost" size="icon-sm" aria-label="Open another PDF" onClick={() => fileRef.current?.click()}><FileUp className="size-4" /></Button>
         <Button className="min-w-0 flex-1" variant="ghost" size="icon-sm" aria-label={theme === "dark" ? "Light mode" : "Dark mode"} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}</Button>
@@ -628,6 +661,7 @@ function ReaderShell() {
           onSelection={handleSelection}
           pdfDarkMode={pdfDarkMode}
           onPageText={setPageText}
+          onPageImage={setPageImage}
           onTextItems={setPageTextItems}
           onTextBlocks={(blocks) => {
             setPageBlocks(blocks);
