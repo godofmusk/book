@@ -316,15 +316,25 @@ function ReaderShell() {
       body.append("apikey", "helloworld");
       body.append("language", "eng");
       body.append("isOverlayRequired", "false");
-      const response = await fetch("https://api.ocr.space/parse/image", { method: "POST", body });
-      if (!response.ok) throw new Error("OCR service request failed");
-      const result = await response.json() as { ParsedResults?: Array<{ ParsedText?: string }>; ErrorMessage?: string };
-      const text = result.ParsedResults?.map((item) => item.ParsedText ?? "").join("\n").trim();
-      if (!text) throw new Error(result.ErrorMessage || "No text was detected");
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 25_000);
+      let text = "";
+      try {
+        const response = await fetch("https://api.ocr.space/parse/image", { method: "POST", body, signal: controller.signal });
+        if (!response.ok) throw new Error("OCR service request failed");
+        const result = await response.json() as { ParsedResults?: Array<{ ParsedText?: string }>; ErrorMessage?: string };
+        text = result.ParsedResults?.map((item) => item.ParsedText ?? "").join("\n").trim() ?? "";
+        if (!text) throw new Error(result.ErrorMessage || "No text was detected");
+      } finally {
+        window.clearTimeout(timeout);
+      }
       setPageText(text);
       setPageTextItems([text]);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "OCR failed");
+      const message = error instanceof DOMException && error.name === "AbortError"
+        ? "OCR service timed out. Please try again or use the desktop app's offline OCR."
+        : error instanceof Error ? error.message : "OCR failed";
+      setError(message);
     } finally {
       setOcrLoading(false);
     }
