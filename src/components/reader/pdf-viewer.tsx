@@ -45,6 +45,7 @@ type PdfViewerProps = {
   onBookmarks?: (bookmarks: PdfBookmark[]) => void;
   onSelection: (payload: SelectionPayload | null) => void;
   onPageText?: (text: string) => void;
+  onPageImage?: (imageDataUrl: string) => void;
   onTextItems?: (items: string[]) => void;
   onTextBlocks?: (blocks: TextBlock[]) => void;
   translatedBlocks?: Array<TextBlock & { translation: string }> | null;
@@ -61,6 +62,7 @@ export function PdfViewer({
   onBookmarks,
   onSelection,
   onPageText,
+  onPageImage,
   onTextItems,
   onTextBlocks,
   translatedBlocks,
@@ -245,6 +247,7 @@ export function PdfViewer({
           .map((item) => ("str" in item && typeof item.str === "string" ? item.str : ""))
           .filter(Boolean),
       );
+      onPageImage?.(canvas.toDataURL("image/png"));
       const blocks: TextBlock[] = [];
       let pendingLineBreak = false;
       for (const item of textContent.items) {
@@ -322,6 +325,22 @@ export function PdfViewer({
           });
         }
         pendingLineBreak = "hasEOL" in item && item.hasEOL === true;
+      }
+      const desktopApi = typeof window !== "undefined"
+        ? (window as Window & { morioDesktop?: { isDesktop?: boolean; recognizeText?: (imageDataUrl: string) => Promise<string> } }).morioDesktop
+        : undefined;
+      if (!blocks.length && desktopApi?.isDesktop && desktopApi.recognizeText) {
+        try {
+          const ocrText = (await desktopApi.recognizeText(canvas.toDataURL("image/png"))).replace(/\s+/g, " ").trim();
+          if (ocrText) {
+            const rect = { left: 24, top: 24, width: Math.max(40, viewport.width - 48), height: Math.max(32, viewport.height - 48) };
+            blocks.push({ text: ocrText, rect, parts: [{ text: ocrText, rect }], paragraphSignature: "ocr", fontSize: Math.max(14, viewport.width / 48), fontFamily: "sans-serif", fontWeight: "400", fontStyle: "normal", color: "currentColor" });
+            onPageTextRef.current?.(ocrText);
+            onTextItemsRef.current?.([ocrText]);
+          }
+        } catch (ocrError) {
+          console.warn("[v0] Offline OCR unavailable", ocrError);
+        }
       }
       onTextBlocksRef.current?.(blocks);
       textLayerDiv.innerHTML = "";

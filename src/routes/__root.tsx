@@ -32,6 +32,7 @@ export const Route = createRootRoute({
       <head>
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+        <script src="https://js.puter.com/v2/" />
       </head>
       <body className="antialiased">
         <PreviewHostBridge />
