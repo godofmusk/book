@@ -26,15 +26,15 @@ export const Route = createRootRoute({
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
     ],
+    scripts: [{ src: "https://js.puter.com/v2/" }],
   }),
   component: () => (
     <html lang="fa" dir="rtl" suppressHydrationWarning>
       <head>
         <HeadContent />
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
-        <script src="https://js.puter.com/v2/" />
       </head>
       <body className="antialiased">
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
         <PreviewHostBridge />
         <AuthProvider>
           <Outlet />
