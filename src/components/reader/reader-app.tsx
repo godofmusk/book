@@ -22,6 +22,11 @@ import {
   ChevronDown,
   PanelLeft,
   Bookmark,
+  Volume2,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -36,6 +41,7 @@ import {
 } from "@/lib/store";
 import { translateText } from "@/lib/translate";
 import { cn } from "@/lib/utils";
+import { SpeechPlayer } from "./speech-player";
 import {
   PdfViewer,
   type PdfBookmark,
@@ -94,6 +100,7 @@ function ReaderShell() {
   const pdfSource = useSettings((s) => s.pdfSource);
   const uploadName = useSettings((s) => s.uploadName);
   const history = useSettings((s) => s.history);
+  const translationProviders = useSettings((s) => s.translationProviders);
   const setTheme = useSettings((s) => s.setTheme);
   const setPage = useSettings((s) => s.setPage);
   const setZoom = useSettings((s) => s.setZoom);
@@ -144,6 +151,15 @@ function ReaderShell() {
   } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const translatingFor = useRef<string | null>(null);
+  const [speechText, setSpeechText] = useState<{ text: string; label: string; lang: string } | null>(null);
+  const stopSpeech = useCallback(() => {
+    setSpeechText(null);
+  }, []);
+  const speakText = useCallback((text: string, label: string, lang: string) => {
+    const clean = text.trim();
+    if (!clean) return;
+    setSpeechText({ text: clean, label, lang });
+  }, []);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
@@ -236,9 +252,10 @@ function ReaderShell() {
           data: {
             text: payload.text,
             sourceLang,
-            targetLang,
-          },
-        });
+    targetLang,
+    providers: translationProviders,
+  },
+});
         if (!res.ok) {
           setError(res.error);
           return;
@@ -536,6 +553,9 @@ function ReaderShell() {
           <Button variant="ghost" size="icon-sm" aria-label="Run OCR" disabled={!pageImage || ocrLoading} onClick={() => void runOcr()}>
             {ocrLoading ? <LoaderCircle className="size-4 animate-spin" /> : <ScanText className="size-4" />}
           </Button>
+          <Button variant="ghost" size="icon-sm" aria-label="Read whole page" onClick={() => speakText((translatedPageText && translatedPageText.trim()) || pageBlocks.map((block) => block.text).join("\n\n") || pageText, "Whole page", sourceLang)}>
+            <Volume2 className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -686,6 +706,7 @@ function ReaderShell() {
             loading={loading}
             error={error}
             history={history}
+            onSpeak={(text, label) => speakText(text, label, label === "Translation" ? targetLang : sourceLang)}
             className="min-h-0 shrink-0 max-md:max-h-[28%] md:w-80 md:max-w-[30vw]"
           />
         ) : null}
@@ -704,6 +725,9 @@ function ReaderShell() {
             onClick={() => void runTranslate(pending)}
           >
             <Languages className="size-4" />
+          </button>
+          <button type="button" className="translation-action flex size-8 items-center justify-center rounded-full transition-colors" aria-label="Read selected text" onClick={() => speakText(pending.text, "Selected text", sourceLang)}>
+            <Volume2 className="size-4" />
           </button>
           <button
             type="button"
@@ -782,6 +806,8 @@ function ReaderShell() {
       />
 
 
+      {speechText ? <SpeechPlayer text={speechText.text} label={speechText.label} lang={speechText.lang} onClose={stopSpeech} /> : null}
+
       {copyDialogOpen ? (
         <div
           role="status"
@@ -805,12 +831,14 @@ function TranslatePanel({
   loading,
   error,
   history,
+  onSpeak,
   className,
 }: {
   current: { source: string; translation: string } | null;
   loading: boolean;
   error: string | null;
   history: { id: string; source: string; translation: string }[];
+  onSpeak: (text: string, label: string) => void;
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -857,18 +885,17 @@ function TranslatePanel({
           <div className="space-y-4">
             <section>
               <p className="mb-1.5 text-[11px] font-medium text-subtle">Original</p>
-              <p
-                dir="auto"
-                className="text-pretty text-sm leading-relaxed text-muted"
-              >
-                {visible.source}
-              </p>
+              <div className="flex items-start justify-between gap-2">
+                <p dir="auto" className="text-pretty text-sm leading-relaxed text-muted">{visible.source}</p>
+                <Button variant="ghost" size="icon-sm" aria-label="Read original" onClick={() => onSpeak(visible.source, "Original")}><Volume2 className="size-4" /></Button>
+              </div>
             </section>
             <section>
               <p className="mb-1.5 text-[11px] font-medium text-subtle">Translation</p>
-              <p dir="auto" className="text-pretty text-base leading-relaxed">
-                {visible.translation}
-              </p>
+              <div className="flex items-start justify-between gap-2">
+                <p dir="auto" className="text-pretty text-base leading-relaxed">{visible.translation}</p>
+                <Button variant="ghost" size="icon-sm" aria-label="Read translation" onClick={() => onSpeak(visible.translation, "Translation")}><Volume2 className="size-4" /></Button>
+              </div>
             </section>
           </div>
         ) : (
@@ -895,6 +922,9 @@ function SettingsDialog({
   const theme = useSettings((s) => s.theme);
   const pdfDarkMode = useSettings((s) => s.pdfDarkMode);
   const zoom = useSettings((s) => s.zoom);
+  const translationProviders = useSettings((s) => s.translationProviders);
+  const setTranslationProviderEnabled = useSettings((s) => s.setTranslationProviderEnabled);
+  const moveTranslationProvider = useSettings((s) => s.moveTranslationProvider);
   const setSourceLang = useSettings((s) => s.setSourceLang);
   const setTargetLang = useSettings((s) => s.setTargetLang);
   const setMode = useSettings((s) => s.setMode);
@@ -952,6 +982,29 @@ function SettingsDialog({
                   body="Translation appears in a small window beside the selection."
                   onClick={() => setMode("float")}
                 />
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <div>
+                <h3 className="text-xs font-medium text-muted">Translation services</h3>
+                <p className="mt-1 text-[11px] text-subtle">Services are tried from top to bottom. Disabled services are skipped.</p>
+              </div>
+              <div className="space-y-2">
+                {translationProviders.map((provider, index) => {
+                  const label = provider.id === "google" ? "Google Translate" : provider.id === "mymemory" ? "MyMemory" : "Lingva Translate";
+                  return (
+                    <div key={provider.id} className="flex items-center gap-2 rounded-xl bg-bg px-3 py-2.5 shadow-[var(--shadow-border)]">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="w-5 text-center text-xs tabular-nums text-subtle">{index + 1}</span>
+                        <span className="truncate text-sm">{label}</span>
+                      </div>
+                      <button type="button" className="rounded-md p-1.5 text-muted hover:bg-fg/8 hover:text-fg disabled:opacity-30" onClick={() => moveTranslationProvider(provider.id, "up")} disabled={index === 0} aria-label={`Move ${label} up`}>↑</button>
+                      <button type="button" className="rounded-md p-1.5 text-muted hover:bg-fg/8 hover:text-fg disabled:opacity-30" onClick={() => moveTranslationProvider(provider.id, "down")} disabled={index === translationProviders.length - 1} aria-label={`Move ${label} down`}>↓</button>
+                      <Switch checked={provider.enabled} onCheckedChange={(enabled) => setTranslationProviderEnabled(provider.id, enabled)} aria-label={`Enable ${label}`} />
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
